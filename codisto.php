@@ -51,10 +51,16 @@ class Codisto_Shell extends Mage_Shell_Abstract
 
 				if($cleaned_statement == '')
 				{
+					echo "Removing trigger ".$trigger['TRIGGER_NAME']."...";
+					
 					$adapter->query('DROP TRIGGER `'.$trigger['TRIGGER_SCHEMA'].'`.`'.$trigger['TRIGGER_NAME'].'`');
+					
+					echo "Removed\n";
 				}
 				else
 				{
+					echo "Removing codisto modifications from trigger ".$trigger['TRIGGER_NAME']."...";
+					
 					$definer = $trigger['DEFINER'];
 					if(strpos($definer, '@') !== false)
 					{
@@ -67,20 +73,35 @@ class Codisto_Shell extends Mage_Shell_Abstract
 					$adapter->query('SET @saved_sql_mode = @@sql_mode');
 					$adapter->query('SET sql_mode = \''.$trigger['SQL_MODE'].'\'');
 					$adapter->query('DROP TRIGGER `'.$trigger['TRIGGER_SCHEMA'].'`.`'.$trigger['TRIGGER_NAME'].'`');
-					$adapter->query('CREATE DEFINER = '.$definer.' TRIGGER `'.$trigger['TRIGGER_NAME'].'` '.$trigger['ACTION_TIMING'].' '.$trigger['EVENT_MANIPULATION'].' ON `'.$trigger['EVENT_OBJECT_SCHEMA'].'`.`'.$trigger['EVENT_OBJECT_TABLE'].'`'.
-					"\nFOR EACH ROW BEGIN ".$cleaned_statement.' END');
+					$adapter->query('CREATE DEFINER = '.$definer.' TRIGGER `'.$trigger['TRIGGER_NAME'].'` '.$trigger['ACTION_TIMING'].' '.$trigger['EVENT_MANIPULATION'].' ON `'.$trigger['EVENT_OBJECT_TABLE'].'`'.
+					"\n FOR EACH ROW BEGIN\n".$cleaned_statement."\n\nEND");
 					$adapter->query('SET sql_mode = @saved_sql_mode');
+					
+					echo "Removed\n";
 				}
 			}
 			
+			echo "Removing codisto_product_change table...";
 			$adapter->query('DROP TABLE IF EXISTS `'.$tablePrefix.'codisto_product_change`');
+			echo "Removed\n";
+			
+			echo "Removing codisto_order_change table...";
 			$adapter->query('DROP TABLE IF EXISTS `'.$tablePrefix.'codisto_order_change`');
+			echo "Removed\n";
+			
+			echo "Removing codisto_category_change table...";
 			$adapter->query('DROP TABLE IF EXISTS `'.$tablePrefix.'codisto_category_change`');
+			echo "Removed\n";
+			
+			echo "Removing codisto_sync table...";
 			$adapter->query('DROP TABLE IF EXISTS `'.$tablePrefix.'codisto_sync`');
+			echo "Removed\n";
 			
 			if($this->getArg('complete'))
 			{
+				echo "Removing codisto_trigger_backup table...";
 				$adapter->query('DROP TABLE IF EXISTS `'.$tablePrefix.'codisto_trigger_history`');
+				echo "Removed\n";
 			}
 
 			echo "\n";
@@ -90,6 +111,29 @@ class Codisto_Shell extends Mage_Shell_Abstract
 			Mage::helper('codistosync')->eBayReIndex();
 			
 			echo "OK\n";
+		}
+		else if($this->getArg('status'))
+		{
+			$stores = Mage::getModel('core/store')->getCollection();
+			$stores->setLoadDefault(true);
+			$stores->clear()->setOrder('store_id', 'ASC');
+			
+			foreach($stores as $store)
+			{
+				$config = Zend_Json::decode($store->getConfig('codisto/merchantid'));
+				if(!is_array($config))
+				{
+					$config = array($config);
+				}
+				
+				$hostkey;
+				if($this->getArg('all'))
+				{
+					$hostkey = $store->getConfig('codisto/hostkey');
+				}
+
+				echo $store->getId()."\t".$store->getCode()."\t".implode(',', $config).(isset($hostkey) ? "\t".$hostkey : '')."\n";	
+			}
 		}
 		else
 		{
@@ -104,10 +148,13 @@ class Codisto_Shell extends Mage_Shell_Abstract
 Usage:  php -f codisto.php -- [options]
         php -f codisto.php -- uninstall [complete]
         php -f codisto.php -- reindex
+        php -f codisto.php -- status [all]
 
   uninstall         Remove all standalone triggers, trigger modifications and codisto database tables
   complete          Removes the codisto_trigger_history table
   reindex           Start a full index of the catalog
+  status            Show codisto configuration per store view
+  all               Show codisto secret host key per store view
   help              This help
 
 USAGE;
